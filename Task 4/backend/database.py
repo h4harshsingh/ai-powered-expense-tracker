@@ -9,5 +9,5 @@ engine = create_engine(
 )
 
 SessionLocal = sessionmaker(bind=engine)
-#Base
+
 Base = declarative_base()
