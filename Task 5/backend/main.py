@@ -16,7 +16,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from dotenv import load_dotenv
 
-from database import engine, Base, get_db
+from database import engine, Base, get_db, test_connection
 from models import FileRecord, Expense
 
 load_dotenv()
@@ -27,6 +27,8 @@ GEMINI_URL = (
     "gemini-3.1-flash-lite:generateContent?key=" + GEMINI_API_KEY
 )
 
+test_connection()
+
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="SmartSpend API")
@@ -34,12 +36,15 @@ app = FastAPI(title="SmartSpend API")
 # CORS must be registered before any routes
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "https://smartspend-expense-tracker.vercel.app",
+        "https://ai-expense.h4harsh.me",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],
-)
-
+    allow_headers=["*"],)
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
 CHUNKS_DIR = os.path.join(BASE_DIR, "uploads", "chunks")

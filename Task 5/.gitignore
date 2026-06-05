@@ -1,6 +1,31 @@
+# Python
 **/venv/
-**/node_modules/
+**/env/
 **/__pycache__/
-**/uploads/
+**/*.pyc
+
+# Environment files
 **/.env
+**/.env.*
+*.env
+
+# Database
 **/*.db
+**/*.sqlite3
+
+# Uploads
+**/uploads/
+
+# Node
+**/node_modules/
+
+# Build files
+build/
+dist/
+
+# Backup files
+*.zip
+Task 5 - Copy/
+
+# VS Code
+.vscode/
