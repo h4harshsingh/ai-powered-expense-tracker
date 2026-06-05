@@ -40,78 +40,141 @@ jobs:
           script: |
             set -euo pipefail
 
+            REPO_DIR="/home/ubuntu/repo"
             BACKEND_DIR="${{ vars.DEPLOY_BACKEND_DIR }}"
             REPO_BACKEND="${{ vars.DEPLOY_REPO_BACKEND }}"
             SERVICE="${{ vars.DEPLOY_SERVICE_NAME }}"
             BRANCH="${{ github.event.inputs.deploy_branch || 'main' }}"
 
             echo "========================================"
-            echo "SmartSpend Deployment"
-            echo "Time:   $(date)"
-            echo "Branch: $BRANCH"
+            echo "SmartSpend Backend Deployment"
+            echo "Time:    $(date)"
+            echo "Branch:  $BRANCH"
+            echo "Repo:    $REPO_DIR"
+            echo "Backend: $BACKEND_DIR"
+            echo "Source:  $REPO_DIR/$REPO_BACKEND"
             echo "========================================"
 
-            cd "$BACKEND_DIR"
-
+            # ── Step 1: Pull latest code from GitHub ──────────
+            echo ""
             echo "[1/5] Pulling latest code..."
+            cd "$REPO_DIR"
+
             if [ -n "$(git status --porcelain)" ]; then
+              echo "Local changes detected — stashing..."
               git stash push -u -m "auto-stash-$(date +%s)"
             fi
+
             git fetch origin "$BRANCH"
             git checkout "$BRANCH"
             git pull --ff-only origin "$BRANCH"
-            echo "Commit: $(git log -1 --oneline)"
 
-            echo "[2/5] Syncing backend files..."
+            echo "Latest commit: $(git log -1 --oneline)"
+
+            # ── Step 2: Copy backend files to service folder ───
+            echo ""
+            echo "[2/5] Copying backend files..."
+            echo "From: $REPO_DIR/$REPO_BACKEND"
+            echo "To:   $BACKEND_DIR"
+
             for f in main.py database.py models.py requirements.txt; do
-              SRC="$BACKEND_DIR/$REPO_BACKEND/$f"
+              SRC="$REPO_DIR/$REPO_BACKEND/$f"
+              DST="$BACKEND_DIR/$f"
               if [ -f "$SRC" ]; then
-                cp "$SRC" "$BACKEND_DIR/$f"
+                cp "$SRC" "$DST"
                 echo "  Copied: $f"
+              else
+                echo "  WARNING: $f not found in repo — skipping"
               fi
             done
 
-            echo "[3/5] Installing dependencies..."
-            source env/bin/activate
-            pip install -r requirements.txt --quiet
+            # Confirm protected files are untouched
+            echo ""
+            echo "Protected files check:"
+            for item in .env env uploads expense_tracker.db; do
+              if [ -e "$BACKEND_DIR/$item" ]; then
+                echo "  OK — $item exists"
+              fi
+            done
 
-            echo "[4/5] Restarting service..."
+            # ── Step 3: Install Python dependencies ───────────
+            echo ""
+            echo "[3/5] Installing dependencies..."
+            source "$BACKEND_DIR/env/bin/activate"
+            pip install -r "$BACKEND_DIR/requirements.txt" --quiet
+            echo "Dependencies installed."
+
+            # ── Step 4: Restart systemd service ───────────────
+            echo ""
+            echo "[4/5] Restarting $SERVICE..."
             sudo systemctl restart "$SERVICE"
             sleep 3
 
-            echo "[5/5] Verifying service..."
+            # ── Step 5: Verify service is active ──────────────
+            echo ""
+            echo "[5/5] Verifying service status..."
             if sudo systemctl is-active --quiet "$SERVICE"; then
-              echo "Service is ACTIVE"
+              echo "Service $SERVICE is ACTIVE"
             else
+              echo "Service $SERVICE FAILED to start"
+              echo ""
+              echo "--- Last 30 log lines ---"
               sudo journalctl -u "$SERVICE" --no-pager -n 30
+              echo "--- End logs ---"
               exit 1
             fi
 
+            echo ""
             echo "========================================"
             echo "Deployment complete: $(date)"
             echo "========================================"
 
       - name: Health check
         run: |
+          echo "Waiting 8 seconds for service to stabilize..."
           sleep 8
-          echo "Checking ${{ vars.DEPLOY_HEALTH_URL }}"
+
+          URL="${{ vars.DEPLOY_HEALTH_URL }}"
+          echo "Checking: $URL"
+
           STATUS=$(curl -s -o /tmp/health.txt -w "%{http_code}" \
-            --max-time 20 --retry 3 --retry-delay 3 \
-            "${{ vars.DEPLOY_HEALTH_URL }}")
-          echo "HTTP $STATUS — $(cat /tmp/health.txt)"
-          if [ "$STATUS" -ne 200 ]; then
-            echo "Health check FAILED"
+            --max-time 20 \
+            --retry 3 \
+            --retry-delay 3 \
+            "$URL")
+
+          BODY=$(cat /tmp/health.txt)
+          echo "HTTP Status: $STATUS"
+          echo "Response:    $BODY"
+
+          if [ "$STATUS" -eq 200 ]; then
+            echo "Health check PASSED"
+          else
+            echo "Health check FAILED — HTTP $STATUS"
             exit 1
           fi
-          echo "Health check PASSED"
 
-      - name: Summary
+      - name: Deployment summary
         if: always()
         run: |
+          echo "========================================"
           if [ "${{ job.status }}" = "success" ]; then
-            echo "DEPLOYMENT SUCCEEDED"
+            echo "STATUS:  SUCCESS"
             echo "Live at: ${{ vars.DEPLOY_HEALTH_URL }}"
+            echo "Commit:  ${{ github.sha }}"
+            echo "By:      ${{ github.actor }}"
           else
-            echo "DEPLOYMENT FAILED"
-            echo "SSH in and run: sudo journalctl -u ${{ vars.DEPLOY_SERVICE_NAME }} -n 50"
+            echo "STATUS:  FAILED"
+            echo ""
+            echo "To investigate on the VM:"
+            echo "  sudo systemctl status ${{ vars.DEPLOY_SERVICE_NAME }}"
+            echo "  sudo journalctl -u ${{ vars.DEPLOY_SERVICE_NAME }} -n 50"
+            echo ""
+            echo "To rollback:"
+            echo "  cd /home/ubuntu/repo"
+            echo "  git log --oneline -5"
+            echo "  git checkout <previous-sha> -- 'Task 5/backend/main.py'"
+            echo "  cp 'Task 5/backend/main.py' /home/ubuntu/backend/main.py"
+            echo "  sudo systemctl restart ${{ vars.DEPLOY_SERVICE_NAME }}"
           fi
+          echo "========================================"
