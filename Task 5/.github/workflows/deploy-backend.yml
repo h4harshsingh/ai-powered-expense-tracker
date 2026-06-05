@@ -1,0 +1,117 @@
+name: Deploy Backend to Azure VM
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'Task 5/backend/**'
+      - '.github/workflows/deploy-backend.yml'
+
+  workflow_dispatch:
+    inputs:
+      deploy_branch:
+        description: 'Branch to deploy'
+        required: false
+        default: main
+        type: string
+
+concurrency:
+  group: backend-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy-backend:
+    name: Deploy FastAPI Backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+
+      - name: SSH Deploy to Azure VM
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host:            ${{ vars.DEPLOY_HOST }}
+          username:        ${{ vars.DEPLOY_USER }}
+          key:             ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          port:            ${{ vars.DEPLOY_PORT }}
+          timeout:         60s
+          command_timeout: 10m
+          script: |
+            set -euo pipefail
+
+            BACKEND_DIR="${{ vars.DEPLOY_BACKEND_DIR }}"
+            REPO_BACKEND="${{ vars.DEPLOY_REPO_BACKEND }}"
+            SERVICE="${{ vars.DEPLOY_SERVICE_NAME }}"
+            BRANCH="${{ github.event.inputs.deploy_branch || 'main' }}"
+
+            echo "========================================"
+            echo "SmartSpend Deployment"
+            echo "Time:   $(date)"
+            echo "Branch: $BRANCH"
+            echo "========================================"
+
+            cd "$BACKEND_DIR"
+
+            echo "[1/5] Pulling latest code..."
+            if [ -n "$(git status --porcelain)" ]; then
+              git stash push -u -m "auto-stash-$(date +%s)"
+            fi
+            git fetch origin "$BRANCH"
+            git checkout "$BRANCH"
+            git pull --ff-only origin "$BRANCH"
+            echo "Commit: $(git log -1 --oneline)"
+
+            echo "[2/5] Syncing backend files..."
+            for f in main.py database.py models.py requirements.txt; do
+              SRC="$BACKEND_DIR/$REPO_BACKEND/$f"
+              if [ -f "$SRC" ]; then
+                cp "$SRC" "$BACKEND_DIR/$f"
+                echo "  Copied: $f"
+              fi
+            done
+
+            echo "[3/5] Installing dependencies..."
+            source env/bin/activate
+            pip install -r requirements.txt --quiet
+
+            echo "[4/5] Restarting service..."
+            sudo systemctl restart "$SERVICE"
+            sleep 3
+
+            echo "[5/5] Verifying service..."
+            if sudo systemctl is-active --quiet "$SERVICE"; then
+              echo "Service is ACTIVE"
+            else
+              sudo journalctl -u "$SERVICE" --no-pager -n 30
+              exit 1
+            fi
+
+            echo "========================================"
+            echo "Deployment complete: $(date)"
+            echo "========================================"
+
+      - name: Health check
+        run: |
+          sleep 8
+          echo "Checking ${{ vars.DEPLOY_HEALTH_URL }}"
+          STATUS=$(curl -s -o /tmp/health.txt -w "%{http_code}" \
+            --max-time 20 --retry 3 --retry-delay 3 \
+            "${{ vars.DEPLOY_HEALTH_URL }}")
+          echo "HTTP $STATUS — $(cat /tmp/health.txt)"
+          if [ "$STATUS" -ne 200 ]; then
+            echo "Health check FAILED"
+            exit 1
+          fi
+          echo "Health check PASSED"
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ "${{ job.status }}" = "success" ]; then
+            echo "DEPLOYMENT SUCCEEDED"
+            echo "Live at: ${{ vars.DEPLOY_HEALTH_URL }}"
+          else
+            echo "DEPLOYMENT FAILED"
+            echo "SSH in and run: sudo journalctl -u ${{ vars.DEPLOY_SERVICE_NAME }} -n 50"
+          fi
