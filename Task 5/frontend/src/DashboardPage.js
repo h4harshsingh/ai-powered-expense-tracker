@@ -92,7 +92,6 @@ export default function DashboardPage() {
         )].sort().reverse();
 
         setAvailableMonths(months);
-        if (months.length > 0) setSelectedMonth(months[0]);
         setLoading(false);
       })
       .catch(() => setLoading(false));
