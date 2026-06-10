@@ -3,11 +3,7 @@ import { saveExpense, BASE_URL } from './api';
 
 var CATEGORIES = ['Food','Travel','Shopping','Utilities','Health','Entertainment','Other'];
 
-export default function ConfirmForm(props) {
-  var result   = props.result;
-  var onSaved  = props.onSaved;
-  var onCancel = props.onCancel;
-
+export default function ConfirmForm({ result, onSaved, onCancel }) {
   var [merchant,    setMerchant   ] = React.useState(result.merchant     != null ? String(result.merchant)    : '');
   var [totalAmount, setTotalAmount] = React.useState(result.total_amount  != null ? String(result.total_amount) : '');
   var [expDate,     setExpDate    ] = React.useState(result.date          != null ? String(result.date)         : '');
@@ -17,131 +13,95 @@ export default function ConfirmForm(props) {
   var [error,       setError      ] = React.useState('');
 
   function handleSave() {
-    if (!totalAmount) {
-      setError('Amount is required.');
-      return;
-    }
+    if (!totalAmount) { setError('Amount is required.'); return; }
     setSaving(true);
     setError('');
-
     saveExpense({
       file_id:      result.file_id,
       merchant:     merchant     || null,
       total_amount: parseFloat(totalAmount),
       date:         expDate      || null,
-      category:     category,
+      category,
       description:  description  || null,
       items:        result.items || [],
       source:       result.extraction_status === 'success' ? 'AI' : 'MANUAL',
     })
-    .then(function() {
-      setSaving(false);
-      onSaved();
-    })
-    .catch(function(err) {
-      console.error('Save failed:', err);
-      setSaving(false);
-      setError('Save failed. Please try again.');
-    });
+    .then(() => { setSaving(false); onSaved(); })
+    .catch(() => { setSaving(false); setError('Save failed. Please try again.'); });
   }
 
-  var imgSrc  = result.image_url ? BASE_URL + result.image_url : null;
-  var isOk    = result.extraction_status === 'success';
+  var imgSrc = result.image_url ? BASE_URL + result.image_url : null;
+  var isOk   = result.extraction_status === 'success';
 
   return (
-    <div>
-      <h3 className="modal-title">Confirm Expense</h3>
+    <div className="confirm-form">
+      <h3 className="confirm-title">Confirm Expense</h3>
 
       {imgSrc && (
-        <img className="receipt-img" src={imgSrc} alt="Receipt preview" />
+        <img className="confirm-receipt-img" src={imgSrc} alt="Receipt preview" />
       )}
 
-      <div className={'ai-banner ' + (isOk ? 'success' : 'failed')}>
+      <div className={'ai-banner ' + (isOk ? 'banner-success' : 'banner-warn')}>
         {isOk
           ? '✅ AI extracted these details — review and confirm.'
           : '⚠️ AI could not read this receipt — please fill in manually.'}
       </div>
 
-      <div className="form-grid">
-        <label className="form-label">
+      <div className="confirm-grid">
+        <label className="field-label">
           Merchant
-          <input
-            className="form-input"
-            type="text"
-            value={merchant}
-            onChange={function(e) { setMerchant(e.target.value); }}
-            placeholder="e.g. Swiggy"
-          />
+          <input className="field-input" type="text" value={merchant}
+            onChange={e => setMerchant(e.target.value)} placeholder="e.g. Swiggy" />
         </label>
 
-        <label className="form-label">
+        <label className="field-label">
           Total Amount (₹) *
-          <input
-            className="form-input"
-            type="number"
-            step="0.01"
-            value={totalAmount}
-            onChange={function(e) { setTotalAmount(e.target.value); }}
-            placeholder="0.00"
-          />
+          <input className="field-input" type="number" step="0.01" value={totalAmount}
+            onChange={e => setTotalAmount(e.target.value)} placeholder="0.00" />
         </label>
 
-        <label className="form-label">
+        <label className="field-label">
           Date
-          <input
-            className="form-input"
-            type="date"
-            value={expDate}
-            onChange={function(e) { setExpDate(e.target.value); }}
-          />
+          <input className="field-input" type="date" value={expDate}
+            onChange={e => setExpDate(e.target.value)} />
         </label>
 
-        <label className="form-label">
+        <label className="field-label">
           Category
-          <select
-            className="form-input"
-            value={category}
-            onChange={function(e) { setCategory(e.target.value); }}
-          >
-            {CATEGORIES.map(function(c) {
-              return <option key={c} value={c}>{c}</option>;
-            })}
+          <select className="field-input" value={category} onChange={e => setCategory(e.target.value)}>
+            {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
         </label>
 
-        <label className="form-label full">
+        <label className="field-label field-full">
           Description
-          <input
-            className="form-input"
-            type="text"
-            value={description}
-            onChange={function(e) { setDescription(e.target.value); }}
-            placeholder="Brief description"
-          />
+          <input className="field-input" type="text" value={description}
+            onChange={e => setDescription(e.target.value)} placeholder="Brief description" />
         </label>
 
         {result.items && result.items.length > 0 && (
-          <div className="items-box">
+          <div className="items-detected field-full">
             <strong>Items detected:</strong>
-            <ul>
-              {result.items.map(function(item, i) {
-                var label = (item && item.name)
-                  ? (item.name + (item.price ? ' — ₹' + item.price : ''))
-                  : String(item);
-                return <li key={i}>{label}</li>;
-              })}
+            <ul className="items-list">
+              {result.items.map((item, i) => (
+                <li key={i}>
+                  {item && item.name
+                    ? item.name + (item.price ? ' — ₹' + item.price : '')
+                    : String(item)}
+                </li>
+              ))}
             </ul>
           </div>
         )}
       </div>
 
-      {error && <p className="form-error">{error}</p>}
+      {error && <p className="field-error">{error}</p>}
 
-      <div className="form-actions">
-        <button className="btn-save" onClick={handleSave} disabled={saving}>
+      <div className="confirm-actions">
+        <button className="btn-confirm-save" onClick={handleSave} disabled={saving}>
           {saving ? 'Saving…' : '✅ Save Expense'}
         </button>
-        <button className="btn-cancel" onClick={onCancel}>Cancel</button>
+        <button className="btn-confirm-cancel" onClick={onCancel}>Cancel</button>
       </div>
     </div>
   );

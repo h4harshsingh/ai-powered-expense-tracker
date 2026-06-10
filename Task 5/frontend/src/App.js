@@ -6,29 +6,34 @@ export default function App() {
   var [tab, setTab] = React.useState('upload');
 
   return (
-    <div>
+    <div className="app-shell">
       <nav className="navbar">
-        <span className="navbar-brand">🧾 SmartSpend</span>
+        <div className="navbar-left">
+          <span className="navbar-logo">💰</span>
+          <span className="navbar-brand">SmartSpend</span>
+        </div>
         <div className="navbar-tabs">
           <button
-            className={'tab-btn' + (tab === 'upload' ? ' active' : '')}
-            onClick={function() { setTab('upload'); }}
+            className={'nav-tab' + (tab === 'upload' ? ' active' : '')}
+            onClick={() => setTab('upload')}
           >
-            📸 Upload Receipt
+            <span className="tab-icon">📸</span>
+            <span className="tab-label">Upload Receipts</span>
           </button>
           <button
-            className={'tab-btn' + (tab === 'expenses' ? ' active' : '')}
-            onClick={function() { setTab('expenses'); }}
+            className={'nav-tab' + (tab === 'expenses' ? ' active' : '')}
+            onClick={() => setTab('expenses')}
           >
-            💰 My Expenses
+            <span className="tab-icon">📋</span>
+            <span className="tab-label">Transactions</span>
           </button>
         </div>
       </nav>
 
-      <div className="page">
-        {tab === 'upload'   && <UploadPage />}
+      <main className="main-content">
+        {tab === 'upload'   && <UploadPage onExpenseSaved={() => setTab('expenses')} />}
         {tab === 'expenses' && <ExpensesPage />}
-      </div>
+      </main>
     </div>
   );
 }

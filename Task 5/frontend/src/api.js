@@ -2,7 +2,7 @@ import axios from 'axios';
 
 export var BASE_URL = process.env.REACT_APP_API_URL || 'http://127.0.0.1:8000';
 
-var CHUNK_SIZE = 1 * 1024 * 1024; // 1MB
+var CHUNK_SIZE = 1 * 1024 * 1024;
 
 export async function uploadFileInChunks(file, onProgress) {
   var totalChunks = Math.ceil(file.size / CHUNK_SIZE);
@@ -33,33 +33,26 @@ export async function uploadFileInChunks(file, onProgress) {
     }
   }
 
-  if (!fileId) {
-    throw new Error('No file_id returned after upload completed');
-  }
-
+  if (!fileId) throw new Error('No file_id returned after upload');
   return fileId;
 }
 
 export function scanReceipt(fileId) {
-  return axios
-    .post(BASE_URL + '/scan-receipt/' + String(fileId))
-    .then(function(r) { return r.data; });
+  return axios.post(BASE_URL + '/scan-receipt/' + String(fileId)).then(r => r.data);
 }
 
 export function saveExpense(payload) {
-  return axios
-    .post(BASE_URL + '/expenses', payload)
-    .then(function(r) { return r.data; });
+  return axios.post(BASE_URL + '/expenses', payload).then(r => r.data);
 }
 
 export function fetchExpenses() {
-  return axios
-    .get(BASE_URL + '/expenses')
-    .then(function(r) { return r.data; });
+  return axios.get(BASE_URL + '/expenses').then(r => r.data);
 }
 
 export function deleteExpense(id) {
-  return axios
-    .delete(BASE_URL + '/expenses/' + String(id))
-    .then(function(r) { return r.data; });
+  return axios.delete(BASE_URL + '/expenses/' + String(id)).then(r => r.data);
+}
+
+export function deleteMultipleExpenses(ids) {
+  return Promise.all(ids.map(id => deleteExpense(id)));
 }
