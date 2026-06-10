@@ -20,6 +20,7 @@ function fmt(n) {
   return '₹' + Number(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+// eslint-disable-next-line no-unused-vars
 function getMonthKey(dateStr) {
   if (!dateStr) return 'Unknown';
   return dateStr.slice(0, 7);

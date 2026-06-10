@@ -4,7 +4,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
   LineChart, Line,
 } from 'recharts';
-import { fetchExpenses, BASE_URL } from './api';
+import { fetchExpenses } from './api';
 
 var CATEGORIES = ['Food', 'Travel', 'Shopping', 'Utilities', 'Health', 'Entertainment', 'Other'];
 
@@ -78,7 +78,7 @@ export default function DashboardPage() {
   var [loading,  setLoading]    = React.useState(true);
   var [selectedMonth, setSelectedMonth] = React.useState('');
   var [availableMonths, setAvailableMonths] = React.useState([]);
-  var [recentExpense, setRecentExpense] = React.useState(null);
+
 
   React.useEffect(() => {
     fetchExpenses()
@@ -157,7 +157,7 @@ export default function DashboardPage() {
   }, [expenses]);
 
   // Recent expense with image
-  var recentWithImage = filtered.find(e => e.image_url);
+
 
   if (loading) {
     return (
