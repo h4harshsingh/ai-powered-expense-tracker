@@ -307,27 +307,6 @@ export default function DashboardPage() {
               </ResponsiveContainer>
             </div>
           )}
-
-          {/* Category breakdown list */}
-          <div className="cat-breakdown-card">
-            <h3 className="chart-title">Category Details</h3>
-            <div className="cat-list">
-              {pieData.map(c => (
-                <div key={c.name} className="cat-row">
-                  <div className="cat-dot" style={{ background: c.color }} />
-                  <div className="cat-name">{c.name}</div>
-                  <div className="cat-bar-wrap">
-                    <div
-                      className="cat-bar-fill"
-                      style={{ width: c.pct + '%', background: c.color }}
-                    />
-                  </div>
-                  <div className="cat-pct">{c.pct}%</div>
-                  <div className="cat-amt">{fmt(c.value)}</div>
-                </div>
-              ))}
-            </div>
-          </div>
         </>
       )}
     </div>
