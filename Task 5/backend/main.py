@@ -390,7 +390,7 @@ def save_expense(data: ExpenseIn, db: Session = Depends(get_db)):
 def get_expenses(
     db: Session = Depends(get_db),
     page: int = Query(1, ge=1),
-    page_size: int = Query(10, ge=1, le=100),
+    page_size: int = Query(10, ge=1, le=5000),
     month: Optional[str] = Query(None, description="YYYY-MM"),
     search: Optional[str] = Query(None),
     category: Optional[str] = Query(None),

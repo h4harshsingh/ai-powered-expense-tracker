@@ -81,9 +81,9 @@ export default function DashboardPage() {
 
 
   React.useEffect(() => {
-    fetchExpenses()
+    fetchExpenses({ page: 1, page_size: 5000, sort_by: 'date-desc' })
       .then(data => {
-        var arr = Array.isArray(data) ? data : [];
+        var arr = Array.isArray(data.expenses) ? data.expenses : [];
         setExpenses(arr);
 
         // Build list of unique months from data
