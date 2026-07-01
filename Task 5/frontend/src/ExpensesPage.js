@@ -94,85 +94,72 @@ function CatBadge({ category }) {
 
 // ── Main Component ─────────────────────────────────────────────────────────
 export default function ExpensesPage() {
-  var [all,        setAll       ] = React.useState([]);
-  var [loading,    setLoading   ] = React.useState(true);
-  var [search,     setSearch    ] = React.useState('');
-  var [catFilter,  setCatFilter ] = React.useState('');
-  var [fromDate,   setFromDate  ] = React.useState('');
-  var [toDate,     setToDate    ] = React.useState('');
-  var [sortBy,     setSortBy    ] = React.useState('date-desc');
-  var [groupBy,    setGroupBy   ] = React.useState('month');
-  var [page,       setPage      ] = React.useState(1);
-  var [selected,   setSelected  ] = React.useState(new Set());
-  var [showDelete, setShowDelete] = React.useState(false);
-  var [deleting,   setDeleting  ] = React.useState(false);
-  var [notification, setNotification] = React.useState(null);
-  var [imagePreview, setImagePreview] = React.useState(null);
+  var [expenses,       setExpenses      ] = React.useState([]);
+  var [loading,        setLoading       ] = React.useState(true);
+  var [search,         setSearch        ] = React.useState('');
+  var [debouncedSearch, setDebouncedSearch] = React.useState('');
+  var [catFilter,      setCatFilter     ] = React.useState('');
+  var [fromDate,       setFromDate      ] = React.useState('');
+  var [toDate,         setToDate        ] = React.useState('');
+  var [sortBy,         setSortBy        ] = React.useState('date-desc');
+  var [groupBy,        setGroupBy       ] = React.useState('month');
+  var [page,           setPage          ] = React.useState(1);
+  var [totalPages,     setTotalPages    ] = React.useState(1);
+  var [totalRecords,   setTotalRecords  ] = React.useState(0);
+  var [selected,       setSelected      ] = React.useState(new Set());
+  var [showDelete,     setShowDelete    ] = React.useState(false);
+  var [deleting,       setDeleting      ] = React.useState(false);
+  var [notification,   setNotification  ] = React.useState(null);
+  var [imagePreview,   setImagePreview  ] = React.useState(null);
 
   function load() {
     setLoading(true);
-    fetchExpenses()
+    fetchExpenses({
+      page: page,
+      page_size: PAGE_SIZE,
+      search: debouncedSearch,
+      category: catFilter,
+      from_date: fromDate,
+      to_date: toDate,
+      sort_by: sortBy,
+    })
       .then(data => {
-        setAll(Array.isArray(data) ? data : []);
+        setExpenses(Array.isArray(data.expenses) ? data.expenses : []);
+        setTotalPages(data.total_pages || 1);
+        setTotalRecords(data.total_records || 0);
         setLoading(false);
       })
       .catch(() => setLoading(false));
   }
 
-  React.useEffect(() => { load(); }, []);
+  // Debounce the search box so we don't fire an API call on every keystroke
+  React.useEffect(() => {
+    var t = setTimeout(() => setDebouncedSearch(search), 400);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  // Reset to page 1 and clear selection whenever a filter changes
+  React.useEffect(() => {
+    setPage(1);
+    setSelected(new Set());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearch, catFilter, fromDate, toDate, sortBy]);
+
+  // Fetch from the backend whenever filters or the page change
+  React.useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearch, catFilter, fromDate, toDate, sortBy, page]);
 
   function showNotif(msg, type) {
     setNotification({ msg, type });
     setTimeout(() => setNotification(null), 3000);
   }
 
-  // ── Filtering ────────────────────────────────────────────────────────────
-  var filtered = React.useMemo(() => {
-    var arr = all.filter(e => {
-      var desc = (e.description || '').toLowerCase();
-      var merch = (e.merchant || '').toLowerCase();
-      var q = search.toLowerCase();
-
-      if (q && !desc.includes(q) && !merch.includes(q)) return false;
-      if (catFilter && e.category !== catFilter) return false;
-
-      var d = e.expense_date || e.date || '';
-      if (fromDate && d < fromDate) return false;
-      if (toDate   && d > toDate)   return false;
-
-      return true;
-    });
-
-    // ── Sorting ──────────────────────────────────────────────────────────
-    arr.sort((a, b) => {
-      var da = a.expense_date || a.date || '';
-      var db = b.expense_date || b.date || '';
-      var aa = a.total_amount || a.amount || 0;
-      var ba = b.total_amount || b.amount || 0;
-
-      switch (sortBy) {
-        case 'date-desc':  return db.localeCompare(da);
-        case 'date-asc':   return da.localeCompare(db);
-        case 'amt-desc':   return ba - aa;
-        case 'amt-asc':    return aa - ba;
-        default:           return db.localeCompare(da);
-      }
-    });
-
-    return arr;
-  }, [all, search, catFilter, fromDate, toDate, sortBy]);
-
-  var totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-
-  // Reset to page 1 when filters change
-  React.useEffect(() => { setPage(1); setSelected(new Set()); }, [search, catFilter, fromDate, toDate, sortBy]);
-
-  var pageSlice = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-
-  // ── Grouping ─────────────────────────────────────────────────────────────
+  // ── Grouping (applied to the current page's rows only) ────────────────────
   var groups = React.useMemo(() => {
     var map = {};
-    pageSlice.forEach(e => {
+    expenses.forEach(e => {
       var d = e.expense_date || e.date || '';
       var key;
       if (groupBy === 'day')   key = d.slice(0, 10) || 'Unknown';
@@ -183,15 +170,13 @@ export default function ExpensesPage() {
       if (!map[key]) map[key] = [];
       map[key].push(e);
     });
-    // Sort group keys
     return Object.entries(map).sort(([a], [b]) => b.localeCompare(a));
-  }, [pageSlice, groupBy]);
+  }, [expenses, groupBy]);
 
   function groupLabel(key) {
     if (key === 'all') return 'All Expenses';
     if (groupBy === 'month') return getMonthLabel(key);
     if (groupBy === 'year')  return key;
-    // day
     if (!key || key === 'Unknown') return 'Unknown Date';
     try {
       return new Date(key + 'T00:00:00').toLocaleDateString('en-IN', {
@@ -201,9 +186,9 @@ export default function ExpensesPage() {
   }
 
   // ── Selection ─────────────────────────────────────────────────────────────
-  var allPageIds    = pageSlice.map(e => e.id);
+  var allPageIds      = expenses.map(e => e.id);
   var allPageSelected = allPageIds.length > 0 && allPageIds.every(id => selected.has(id));
-  var someSelected  = selected.size > 0;
+  var someSelected    = selected.size > 0;
 
   function toggleSelectAll() {
     if (allPageSelected) {
@@ -242,6 +227,7 @@ export default function ExpensesPage() {
 
   function clearFilters() {
     setSearch('');
+    setDebouncedSearch('');
     setCatFilter('');
     setFromDate('');
     setToDate('');
@@ -259,6 +245,9 @@ export default function ExpensesPage() {
     );
   }
 
+  var startIdx = totalRecords > 0 ? (page - 1) * PAGE_SIZE + 1 : 0;
+  var endIdx   = Math.min(page * PAGE_SIZE, totalRecords);
+
   return (
     <div className="expenses-page">
 
@@ -274,10 +263,9 @@ export default function ExpensesPage() {
         <div>
           <h1 className="page-title">Transactions</h1>
           <p className="page-subtitle">
-            {filtered.length > 0
-              ? 'Showing ' + ((page - 1) * PAGE_SIZE + 1) + '–' +
-                Math.min(page * PAGE_SIZE, filtered.length) + ' of ' + filtered.length + ' expense' +
-                (filtered.length !== 1 ? 's' : '')
+            {totalRecords > 0
+              ? 'Showing ' + startIdx + '–' + endIdx + ' of ' + totalRecords + ' expense' +
+                (totalRecords !== 1 ? 's' : '')
               : 'No expenses found'}
           </p>
         </div>
@@ -351,7 +339,7 @@ export default function ExpensesPage() {
       </div>
 
       {/* Expenses list */}
-      {filtered.length === 0 ? (
+      {expenses.length === 0 ? (
         <div className="empty-state">
           <div className="empty-icon">🔍</div>
           <h3>No expenses found</h3>

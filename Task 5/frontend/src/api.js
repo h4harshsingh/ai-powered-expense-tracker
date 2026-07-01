@@ -45,8 +45,14 @@ export function saveExpense(payload) {
   return axios.post(BASE_URL + '/expenses', payload).then(r => r.data);
 }
 
-export function fetchExpenses() {
-  return axios.get(BASE_URL + '/expenses').then(r => r.data);
+export function fetchExpenses(params) {
+  var cleaned = {};
+  var src = params || {};
+  Object.keys(src).forEach(function (k) {
+    var v = src[k];
+    if (v !== undefined && v !== null && v !== '') cleaned[k] = v;
+  });
+  return axios.get(BASE_URL + '/expenses', { params: cleaned }).then(r => r.data);
 }
 
 export function deleteExpense(id) {

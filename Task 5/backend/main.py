@@ -8,12 +8,13 @@ import aiofiles
 import requests as http_requests
 
 from typing import Optional
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from dotenv import load_dotenv
 
 from database import engine, Base, get_db, test_connection
@@ -386,8 +387,53 @@ def save_expense(data: ExpenseIn, db: Session = Depends(get_db)):
 # ── GET EXPENSES ──────────────────────────────────────────────
 
 @app.get("/expenses")
-def get_expenses(db: Session = Depends(get_db)):
-    rows   = db.query(Expense).order_by(Expense.created_at.desc()).all()
+def get_expenses(
+    db: Session = Depends(get_db),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=100),
+    month: Optional[str] = Query(None, description="YYYY-MM"),
+    search: Optional[str] = Query(None),
+    category: Optional[str] = Query(None),
+    from_date: Optional[str] = Query(None, description="YYYY-MM-DD"),
+    to_date: Optional[str] = Query(None, description="YYYY-MM-DD"),
+    sort_by: str = Query("date-desc"),
+):
+    query = db.query(Expense)
+
+    if month:
+        query = query.filter(Expense.expense_date.like(month + "%"))
+
+    if category:
+        query = query.filter(Expense.category == category)
+
+    if from_date:
+        query = query.filter(Expense.expense_date >= from_date)
+
+    if to_date:
+        query = query.filter(Expense.expense_date <= to_date)
+
+    if search:
+        like_pattern = "%" + search + "%"
+        query = query.filter(
+            or_(
+                Expense.merchant.ilike(like_pattern),
+                Expense.description.ilike(like_pattern),
+            )
+        )
+
+    sort_map = {
+        "date-desc": Expense.expense_date.desc(),
+        "date-asc":  Expense.expense_date.asc(),
+        "amt-desc":  Expense.amount.desc(),
+        "amt-asc":   Expense.amount.asc(),
+    }
+    query = query.order_by(sort_map.get(sort_by, Expense.expense_date.desc()))
+
+    total_records = query.count()
+    total_pages   = max(1, (total_records + page_size - 1) // page_size)
+
+    rows = query.offset((page - 1) * page_size).limit(page_size).all()
+
     result = []
     for e in rows:
         fr = db.query(FileRecord).filter(FileRecord.id == e.file_id).first()
@@ -410,8 +456,14 @@ def get_expenses(db: Session = Depends(get_db)):
             "created_at":   str(e.created_at),
             "image_url":    "/files/" + fr.stored_name if fr else None,
         })
-    return result
 
+    return {
+        "page":          page,
+        "page_size":     page_size,
+        "total_records": total_records,
+        "total_pages":   total_pages,
+        "expenses":      result,
+    }
 
 # ── DELETE EXPENSE ────────────────────────────────────────────
 
